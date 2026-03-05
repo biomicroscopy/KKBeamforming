@@ -1,38 +1,38 @@
+%% KKfiguresResolutionTargets - Generate resolution target analysis figures
+%
+% This script generates publication-quality figures comparing DAS and KK
+% beamforming on resolution phantom targets. Includes zoom regions and
+% lateral line profiles for PSF width assessment.
+%
+% User paths to modify:
+%   - dataFilePath: path to ultrasound dataset directory
+%
+% Required data: ResolutionTargets .mat files
+%
+% Required functions: initParams, bfmAndProcessFreq, computeNewGrid,
+%   computeContrastMatch, plotGammaScaleImage
+%
+% Outputs: Full-view figures, zoom figures, and lateral intensity profiles
+
 %% Initialize file location
 clearvars
-% close all
 
 % Extract Current Path
-currentDir = matlab.desktop.editor.getActiveFilename; 
+currentDir = matlab.desktop.editor.getActiveFilename;
 currentDir = regexp(currentDir, filesep, 'split');
 dataFilePath = fullfile(currentDir{1:find(contains(currentDir,"Ultrasound"),1)},"Datasets\");
 
 dataFile{1} = dataFilePath + "KK Data\TallPhantom_12.17.25\ResolutionTargets_48.mat";
-filetype = 2;
+filetype = 0;
 [p,RFData] = initParams(dataFile,filetype);
 p.szAcq = int32(p.szRFframe+1);
 %% Process data
-% pLarge = p;
 pLarge = computeNewGrid(p,[51,140],[141,210],90*4,70*4);
-% pLarge.fnumber = 0.6;
 
 M = double(pLarge.na);
-% tic; images = bfmAndProcess(pLarge,RFData,M); toc
 tic; images = bfmAndProcessFreq(pLarge,RFData,M); toc
-
-% M = double(pLarge.numEl/4)+1;
-% tic; images2 = bfmAndProcess(pLarge,RFData,M); toc
 %% Plotting
 zC = [191,235]; xC = [31,90];
-
-% figRes = plotResFig(pLarge,images,0.5,200,xC,zC);
-% export_fig figRes.png -m4 -transparent
-
-% figRes2 = plotResFig(pLarge,images2,0.5,200,xC,zC);
-% export_fig figRes2.png -m4 -transparent
-
-% plotResFig_manualPosition(pLarge, images, 0.5, 200, xC, zC)
-% export_fig figRes.png -m4 -transparent
 
 %% Plotting full data
 figure('Units','pixels','Position',[357,68,1337,909])

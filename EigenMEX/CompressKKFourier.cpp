@@ -1,3 +1,44 @@
+/*
+ * CompressKKFourier - Frequency-domain data compression for KK beamforming
+ *
+ * MEX function using the MATLAB C++ Data API (R2018a+).
+ *
+ * Compresses RF data in the frequency domain by applying precomputed
+ * shift factors (complex exponential phase terms) to the FFT of the
+ * channel data. The result is a compressed dataset indexed by TX and
+ * RX angle combinations, ready for beamforming via KKLUT.
+ *
+ * Syntax (MATLAB):
+ *   RFDataKK = CompressKKFourier(param, DataFFT, shiftFac)
+ *
+ * Inputs:
+ *   inputs[0] - param:    int32 vector [szAcq, numEl, na, nRX, midpt]
+ *                         Sizes and the one-sided FFT midpoint index.
+ *   inputs[1] - DataFFT:  complex single [szAcq x (na*numEl)]
+ *                         FFT of the descrambled RF data.
+ *   inputs[2] - shiftFac: complex single [(numEl*nRX) x szAcq]
+ *                         Precomputed shift factors (phase ramps with
+ *                         one-sided Hilbert weighting).
+ *
+ * Outputs:
+ *   outputs[0] - RFDataKK: complex single [szAcq x (na*nRX)]
+ *                          Compressed data in the frequency domain.
+ *
+ * Algorithm:
+ *   For each frequency bin t (up to midpt):
+ *     1. Extract one row of DataFFT as a [na x numEl] matrix (via stride).
+ *     2. Extract the corresponding column of shiftFac as [numEl x nRX].
+ *     3. Multiply: RFRow = DataRow * sFacCol  =>  [na x nRX].
+ *     4. Write result into the output via strided mapping.
+ *   Only the first half of the spectrum is computed (one-sided due to
+ *   Hilbert weighting embedded in shiftFac), so the IFFT of the output
+ *   produces an analytic signal.
+ *
+ * Compilation:
+ *   See CompileScriptCompressKK.m
+ *
+ * Dependencies: Eigen 3.4.0, OpenMP
+ */
 #include <iostream>
 #include "mex.hpp"
 #include "mexAdapter.hpp"
@@ -44,23 +85,25 @@ public:
         omp_set_num_threads(nProc);
         
         
+        // Define strided map types for non-contiguous access into column-major data
         using Stride2 = Eigen::Stride<Eigen::Dynamic, Eigen::Dynamic>;
         using CMatStrided = Eigen::Map<const Eigen::MatrixXcf, 0, Stride2>;
         using MatStrided  = Eigen::Map<Eigen::MatrixXcf, 0, Stride2>;
         
+        // Process each frequency bin independently across threads
         #pragma omp parallel for
         for (int t = 0; t < midpt; ++t) {
             
             // Map to shiftFac col
             Eigen::Map<const Eigen::MatrixXcf> sFacCol(shiftFac.col(t).data(), xSize, RXSize);
             
-            // Map to DataFFT row
+            // Map row t of DataFFT as [na x numEl] using column-major stride
             CMatStrided DataRow(ptr + t, TXSize, xSize, Stride2(TXSize * tSize, tSize));
             
-            // Map to row of output
+            // Map row t of output as [na x nRX] using column-major stride
             MatStrided RFRow(ptrRecon + t, TXSize, RXSize, Stride2(TXSize * tSize, tSize));
             
-            // Perform Multiplication
+            // Matrix multiply: compress numEl channels into nRX virtual RX angles
             RFRow.noalias() = DataRow * sFacCol;
         }
 

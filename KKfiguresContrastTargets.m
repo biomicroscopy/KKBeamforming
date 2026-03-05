@@ -1,23 +1,34 @@
+%% KKfiguresContrastTargets - Generate contrast target analysis figures
+%
+% This script generates publication-quality figures comparing DAS and KK
+% beamforming on contrast phantom targets. Computes GCNR metrics using
+% signal (ellipse) and noise (rectangle) regions.
+%
+% User paths to modify:
+%   - dataFilePath: path to ultrasound dataset directory
+%
+% Required data: ContrastTargets .mat files
+%
+% Required functions: initParams, bfmAndProcessFreq, computeNewGrid,
+%   computeContrastMatch, RegionSelector, plotGammaScaleImage
+%
+% Outputs: Figure with tiled DAS/KK comparison images and GCNR metrics
+
 %% Initialize file location
 clearvars
-% close all
 
 % Extract Current Path
-currentDir = matlab.desktop.editor.getActiveFilename; 
+currentDir = matlab.desktop.editor.getActiveFilename;
 currentDir = regexp(currentDir, filesep, 'split');
 dataFilePath = fullfile(currentDir{1:find(contains(currentDir,"Ultrasound"),1)},"Datasets\");
 
-% dataFile{1} = dataFilePath + "KK Data\TallPhantom_1.5.26\ContrastTargets.mat";
 dataFile{1} = dataFilePath + "KK Data\TallPhantom_1.9.26\ContrastTargets_24.mat";
-filetype = 2;
+filetype = 0;
 [p,RFData] = initParams(dataFile,filetype);
 p.szAcq = int32(p.szRFframe+1);
 %% Process data
-% pLarge = computeNewGrid(p,[71,120],[76,130],50*4,55*4);
 pLarge = computeNewGrid(p,[76,140],[71,135],65*4,65*4);
-% pLarge = p;
 
-% M = double(pLarge.na);
 M = 7;
 tic; images = bfmAndProcessFreq(pLarge,RFData,M); toc
 
@@ -27,7 +38,6 @@ tic; images2 = bfmAndProcessFreq(pLarge,RFData,M); toc
 %% Plotting
 
 figContrast = plotContrastFig_manualPixels(pLarge, images, images2, 0.5, 200);
-% export_fig figContrast.png -m4 -transparent
 
 %% Helper Functions
 
@@ -80,11 +90,6 @@ end
 function [n] = plotSubFigs_manualPixels(fig, tilePosPx, images, p, n, g0, yOffset, xOffset)
 
     % Define New Region Selector
-%     nReg = [141,61;180,170];   % [x1,z1;x2,z2] coordss of opposite corners
-%     sReg = [85,34;118,42];     % [x0,rx;z0,rz] center and radii of ellipse
-%     iReg = [1,1;p.szX,p.szZ];   % [x1,z1;x2,z2] coords of opposite corners
-%     name = "Atten";
-    
     nReg = [181,66;250,210];   % [x1,z1;x2,z2] coordss of opposite corners
     sReg = [89,48;138,67];     % [x0,rx;z0,rz] center and radii of ellipse
     iReg = [1,1;p.szX,p.szZ];   % [x1,z1;x2,z2] coords of opposite corners
@@ -246,13 +251,6 @@ function [C, CNR, GCNR] = computeContMetrics(R,images)
         % magnitudes
         imgReg = img(imgMap);
         x=linspace(min(imgReg(:)),max(imgReg(:)),25);
-
-
-        % [~,edges] = histcounts(img(signalMap), 'Normalization','pdf');
-        % pdf_i = edges(2:end) - (edges(2)-edges(1))/2;
-        % 
-        % [~,edges] = histcounts(img(noiseMap), 'Normalization','pdf');
-        % pdf_o = edges(2:end) - (edges(2)-edges(1))/2;
 
         [pdf_i]=hist(img(signalMap),x);
         [pdf_o]=hist(img(noiseMap),x);

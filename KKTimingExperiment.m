@@ -1,6 +1,22 @@
+%% KKTimingExperiment - Benchmark KK vs DAS beamforming performance
+%
+% This script measures execution time of each pipeline stage (descramble,
+% FFT, compress, IFFT, beamform) for KK and DAS beamforming across
+% multiple RX angle counts (M) and TX angle counts. Runs 1000 iterations
+% for statistical significance.
+%
+% User paths to modify:
+%   - dataFilePath: path to ultrasound dataset directory
+%
+% Required data: ContrastTarget .mat files with 7 and 15 TX angles
+%
+% Required functions: initParams, initKKFreqDomain, initParamsLUTV2,
+%   CompressKKFourier (MEX), KKLUT (MEX), DASLUT (MEX)
+%
+% Outputs: Table of mean execution times per pipeline stage
+
 %% Initialize file location
 clearvars
-% close all
 
 % Extract Current Path
 currentDir = matlab.desktop.editor.getActiveFilename; 
@@ -8,27 +24,19 @@ currentDir = regexp(currentDir, filesep, 'split');
 dataFilePath = fullfile(currentDir{1:find(contains(currentDir,"Ultrasound"),1)},"Datasets\");
 
 dataFile{1} = dataFilePath + "KK Data\TallPhantom_2.3.26\ContrastTarget_7A24R.mat";
-filetype = 2;
+filetype = 0;
 [p1,RFData1] = initParams(dataFile,filetype);
 p1.szAcq = int32(p1.szRFframe+1);
 RFData1 = RFData1(1:p1.szAcq*p1.na,:);
 p1.szRF = int32(p1.szAcq*p1.na);
 
 dataFile{1} = dataFilePath + "KK Data\TallPhantom_2.3.26\ContrastTarget_15A24R.mat";
-filetype = 2;
+filetype = 0;
 [p2,RFData2] = initParams(dataFile,filetype);
 p2.szAcq = int32(p2.szRFframe+1);
 RFData2 = RFData2(1:p2.szAcq*p2.na,:);
 p2.szRF = int32(p2.szAcq*p2.na);
 %% Initialize
-
-% Define RX angle
-% M = double(p.na);
-% dTheta = mean(diff(p.TXangle));
-% o = (-floor(M/2):floor(M/2));
-% j = floor(p.na/2)-1;
-% p.RXangle = sign(o).*dTheta.*(2*abs(o)/M + j);
-% p.nRX = int32(length(p.RXangle));
 
 n = 1;
 Mvec = [7,19,21,57];
@@ -126,7 +134,7 @@ function [Recon,Timing,lab] = BfmKKFreqSumTimed(RFData, p)
 
     % Compress and Hilb
     tic;
-    DataInt = CompressKKFourierV4(param,DataFFT,p.shiftFac);
+    DataInt = CompressKKFourier(param,DataFFT,p.shiftFac);
     Timing(n) = toc; n = n+1;
     
     % IFFT
@@ -136,7 +144,7 @@ function [Recon,Timing,lab] = BfmKKFreqSumTimed(RFData, p)
     
     % Beamform
     tic;    
-    Recon = KKLUTV3(p,RawDataKK,p.RXDelayX,p.RXDelayZ,p.TXDelayX,p.TXDelayZ);
+    Recon = KKLUT(p,RawDataKK,p.RXDelayX,p.RXDelayZ,p.TXDelayX,p.TXDelayZ);
     Timing(n) = toc; n = n+1;
 
     lab = {'DescrambleAndFFT','Compress','IFFT','Beamform','Total'};
@@ -165,7 +173,7 @@ function [Recon,Timing,lab] = BfmDASTimed(RFData, p)
     
     % Beamform
     tic;
-    Recon = DASLUTV5(p,Data,p.RXDelay,p.TXDelayX,p.TXDelayZ);
+    Recon = DASLUT(p,Data,p.RXDelay,p.TXDelayX,p.TXDelayZ);
     Timing(n) = toc; n = n+1;
     
     lab = {'DescrambleAndFFT','Compress','IFFT','Beamform','Total'};

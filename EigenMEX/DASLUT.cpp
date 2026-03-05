@@ -1,3 +1,54 @@
+/*
+ * DASLUT - Delay-And-Sum beamforming using lookup tables
+ *
+ * MEX function using the MATLAB C++ Data API (R2018a+).
+ *
+ * Performs DAS beamforming on analytic (Hilbert-transformed) RF data
+ * using precomputed TX and RX delay lookup tables. Delays are factored
+ * into separable lateral (X) and axial (Z) components for TX, and a
+ * combined RX delay table with reduced redundancy.
+ *
+ * Syntax (MATLAB):
+ *   Recon = DASLUT(p, RFData, RXDelay, TXDelayX, TXDelayZ)
+ *
+ * Inputs:
+ *   inputs[0] - p:        struct with fields:
+ *                            numEl  (int32) - number of elements
+ *                            szRF   (int32) - total RF samples per frame
+ *                            szAcq  (int32) - samples per acquisition
+ *                            szX    (int32) - number of lateral pixels
+ *                            szZ    (int32) - number of axial pixels
+ *                            na     (int32) - number of TX angles
+ *                            nc     (int32) - number of channels
+ *                            ConnMap(int32) - element-to-channel mapping
+ *   inputs[1] - RFData:   complex single [szRF x nc]
+ *                          Analytic RF data (after Hilbert transform).
+ *   inputs[2] - RXDelay:  single [(numEl+szX-1) x szZ]
+ *                          RX delay LUT with reduced redundancy (samples).
+ *   inputs[3] - TXDelayX: single [szX x na]
+ *                          TX lateral delay component (samples).
+ *   inputs[4] - TXDelayZ: single [szZ x na]
+ *                          TX axial delay component (samples).
+ *
+ * Outputs:
+ *   outputs[0] - Recon: complex single [szZ x szX]
+ *                        Beamformed image (coherent sum over elements
+ *                        and TX angles).
+ *
+ * Algorithm:
+ *   For each TX angle:
+ *     For each pixel (ix, iz):
+ *       total_delay = TXDelayX(ix) + TXDelayZ(iz) + RXDelay(iD, iz)
+ *       Accumulate linearly interpolated RF samples across all elements.
+ *   The RX delay table exploits Toeplitz-like structure: the index
+ *   iD = element + (szX - ix) maps lateral pixel position into the
+ *   reduced-redundancy table.
+ *
+ * Compilation:
+ *   See CompileAndTestLUTDAS.m
+ *
+ * Dependencies: Eigen 3.4.0, OpenMP
+ */
 #include <iostream>
 #include "mex.hpp"
 #include "mexAdapter.hpp"
@@ -75,19 +126,23 @@ public:
             Eigen::Ref<Eigen::MatrixXcf> Recon,
             const Eigen::Ref<const Eigen::MatrixXcf>& RFData) {
 
+        // Parallelize over lateral pixel positions
         #pragma omp parallel for
         for (int ix = 0; ix < p.szX; ix++) {
             for (int iz = 0; iz < p.szZ; iz++) {
+                // Combined TX delay for this pixel and angle
                 float tx = TXDelayX(ix) + TXDelayZ(iz);
 
+                // Map lateral pixel to reduced-redundancy RX delay index
                 int ixD = p.szX-ix;
                 for (int ie = 0; ie < p.numEl; ++ie) {
 
                     const int iD = ie + ixD - 1;
 
+                    // Total round-trip delay in samples
                     const float s = RXDelay(iD,iz) + tx;
 
-                    // base sample (0-based)
+                    // Linear interpolation between adjacent samples
                     int base = static_cast<int>(s);
                     const float w = s - static_cast<float>(base);
 
