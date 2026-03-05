@@ -1,30 +1,34 @@
+%% KKfiguresBiologicalData - Generate biological data comparison figures
+%
+% This script generates publication-quality figures comparing DAS and KK
+% beamforming on biological (in-vivo) ultrasound data. Produces a 4x4
+% tiled layout with gamma-scale visualization.
+%
+% User paths to modify:
+%   - dataFilePath: path to ultrasound dataset directory
+%   - dataFile: specific biological dataset to process
+%
+% Required data: Biological ultrasound .mat files (Verasonics format)
+%
+% Required functions: initParams, bfmAndProcessFreq, computeNewGrid,
+%   computeContrastMatch, plotGammaScaleImage
+%
+% Outputs: Comparison figures (bio data, DAS-only reference)
+
 %% Initialize file location
 clearvars
-% close all
 
 % Extract Current Path
-currentDir = matlab.desktop.editor.getActiveFilename; 
+currentDir = matlab.desktop.editor.getActiveFilename;
 currentDir = regexp(currentDir, filesep, 'split');
 dataFilePath = fullfile(currentDir{1:find(contains(currentDir,"Ultrasound"),1)},"Datasets\");
 
-% dataFile{1} = dataFilePath + "Jerome Data\abdomen4.mat";
-% dataFile{1} = dataFilePath + "Alex Data\Left Shoulder L123v\ACjoint.mat";
-% dataFile{1} = dataFilePath + "Alex Data\Left Shoulder L123v\BicepsTendonXsec.mat";
 dataFile{1} = dataFilePath + "Alex Data\Left Shoulder L123v\GlenohumeralJoint.mat";
-% dataFile{1} = dataFilePath + "Alex Data\HipBursa.mat";
-% dataFile{1} = dataFilePath + "Alex Data\ACJointXsec.mat";
-
-% dataFile{1} = dataFilePath + "KK Data\BiologicalData_2.18.26\LeftThighTop.mat";
-% filetype = 2;
 filetype = 13;
 [p,RFData] = initParams(dataFile,filetype);
 p.szAcq = int32(p.szRFframe+1);
 %% Process data
-% pLarge = computeNewGrid(p,[13,180],[51,350],168*4,300*4);
-% pLarge = computeNewGrid(p,[1,p.szX],[1,220],p.szX*2,220*2);
 pLarge = computeNewGrid(p,[1,p.szX],[1,300],p.szX*2,300*2);
-% pLarge = computeNewGrid(p,[1,p.szX],[1,p.szZ],p.szX*2,p.szZ*2);
-% pLarge = p;
 
 M = 7;
 tic; images1 = bfmAndProcessFreq(pLarge,RFData,M); toc
@@ -35,13 +39,10 @@ tic; images2 = bfmAndProcessFreq(pLarge,RFData,M); toc
 %% Plotting
 g0 = 0.5;
 figBio = plotBiologicalFig_manualPixels(pLarge, images1, images2, g0, 200);
-export_fig figBio.png -m4 -transparent
-
 
 fig = figure('Position',[50 50 612 788]);
 plotGammaScaleImage(pLarge.xCoord*1e3,pLarge.zCoord*1e3,images1(1).data,g0)
 axis image
-export_fig figBioDAS.png -m4 -transparent
 
 %% Helper Functions
 
@@ -84,23 +85,9 @@ function [fig] = plotBiologicalFig_manualPixels(p, images1, images2, g0, input_i
     % Plot the first set of images and label them
     n = 1;
     n = plotSubFigs_manualPixels(fig, tilePosPx, images1, p, n, g0, 30, xOffset); n = n + 1;
-    
-%     lab2 = annotation(fig, 'textbox', [0,0,.01,.01],...
-%         'String', "M=19",'BackgroundColor','white','EdgeColor','none','FontWeight','bold','FontSize',15);
-%     pos = tilePosPx(1);
-%     posY = pos(2)+30+pos(4);
-%     lab2.Units = 'pixels';
-%     lab2.Position = [fig_width/2-25,posY,50,30];
-    
+
     % Plot second set of images and label them
     n = plotSubFigs_manualPixels(fig, tilePosPx, images2, p, n, g0, 0, xOffset); n = n + 1;
-    
-%     lab3 = annotation(fig, 'textbox', [0,0,.01,.01],...
-%         'String', "M=48",'BackgroundColor','white','EdgeColor','none','FontWeight','bold','FontSize',15);
-%     pos = tilePosPx(8);
-%     posY = pos(2);
-%     lab3.Units = 'pixels';
-%     lab3.Position = [fig_width/2-25,posY,50,30];
 
 end
 

@@ -1,3 +1,57 @@
+/*
+ * KKLUT - KK beamforming using lookup tables
+ *
+ * MEX function using the MATLAB C++ Data API (R2018a+).
+ *
+ * Beamforms compressed KK data using precomputed TX and RX delay
+ * lookup tables. Unlike DASLUT (which sums over physical elements),
+ * this function sums over virtual TX and RX angle pairs. Both TX and
+ * RX delays are factored into separable lateral (X) and axial (Z)
+ * components based on a plane-wave propagation model.
+ *
+ * Syntax (MATLAB):
+ *   Recon = KKLUT(p, RFDataKK, RXDelayX, RXDelayZ, TXDelayX, TXDelayZ)
+ *
+ * Inputs:
+ *   inputs[0] - p:         struct with fields:
+ *                             numEl (int32) - number of elements
+ *                             szAcq (int32) - samples per acquisition
+ *                             szX   (int32) - number of lateral pixels
+ *                             szZ   (int32) - number of axial pixels
+ *                             na    (int32) - number of TX angles
+ *                             nRX   (int32) - number of RX angles
+ *   inputs[1] - RFDataKK:  complex single [szAcq x (na*nRX)]
+ *                           Compressed KK data (output of CompressKKFourier
+ *                           followed by IFFT).
+ *   inputs[2] - RXDelayX:  single [szX x nRX]
+ *                           RX lateral delay component (samples).
+ *   inputs[3] - RXDelayZ:  single [szZ x nRX]
+ *                           RX axial delay component (samples).
+ *   inputs[4] - TXDelayX:  single [szX x na]
+ *                           TX lateral delay component (samples).
+ *   inputs[5] - TXDelayZ:  single [szZ x na]
+ *                           TX axial delay component (samples).
+ *
+ * Outputs:
+ *   outputs[0] - Recon: complex single [szZ x szX]
+ *                        Beamformed image (coherent sum over TX/RX
+ *                        angle pairs).
+ *
+ * Algorithm:
+ *   For each RX angle n (parallelized):
+ *     For each TX angle j:
+ *       For each pixel (ix, iz):
+ *         delay = TXDelayX(ix,j) + TXDelayZ(iz,j)
+ *               + RXDelayX(ix,n) + RXDelayZ(iz,n)
+ *         Accumulate linearly interpolated KK data.
+ *   The column of RFDataKK is indexed as n*na + j, matching the
+ *   output layout of CompressKKFourier.
+ *
+ * Compilation:
+ *   See CompileScriptBeamformKK.m
+ *
+ * Dependencies: Eigen 3.4.0, OpenMP
+ */
 #include <iostream>
 #include "mex.hpp"
 #include "mexAdapter.hpp"
@@ -61,11 +115,13 @@ public:
         
         int maxIDX = p.szAcq - 2;
         
+        // Parallelize over RX angles (each thread accumulates into shared Recon)
         #pragma omp parallel for
         for (int n = 0; n < p.nRX; n++) {
             
             for (int j = 0; j < p.na; j++) {
                 
+                // Column index into compressed KK data: RX angle * na + TX angle
                 int RFCol = n*p.na + j;
                 calcLinKK(p, maxIDX, TXDelayX.col(j), TXDelayZ.col(j), RXDelayX.col(n), 
                         RXDelayZ.col(n), Recon, RFDataKK.col(RFCol));
@@ -84,9 +140,11 @@ public:
         
         for (int ix = 0; ix < p.szX; ix++) {
             for (int iz = 0; iz < p.szZ; iz++) {
+                // Total plane-wave round-trip delay for this TX/RX angle pair
                 float idxt = TXDelayX(ix) + TXDelayZ(iz) + RXDelayX(ix) + RXDelayZ(iz);
                 int vIDX = static_cast<int>(idxt);
                 if (vIDX >= 0 && vIDX < maxIDX) {
+                    // Linear interpolation weights
                     float interp2 = idxt - vIDX;
                     float interp1 = 1 - interp2;
                     Recon(iz,ix) += (RFDataKK(vIDX)*interp1 + RFDataKK(vIDX+1)*interp2);
