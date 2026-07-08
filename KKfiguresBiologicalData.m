@@ -21,12 +21,17 @@ clearvars
 % Extract Current Path
 currentDir = matlab.desktop.editor.getActiveFilename;
 currentDir = regexp(currentDir, filesep, 'split');
-dataFilePath = fullfile(currentDir{1:find(contains(currentDir,"Ultrasound"),1)},"Datasets\");
+dataFilePath = fullfile(currentDir{1:find(contains(currentDir,"KKBeamforming"),1)},"Datasets");
 
-dataFile{1} = dataFilePath + "Alex Data\Left Shoulder L123v\GlenohumeralJoint.mat";
-filetype = 13;
+% dataFile{1} = fullfile(dataFilePath, "ACjoint.mat");
+% filetype = 13;
+
+dataFile{1} = fullfile(dataFilePath, "ACjointXSec.mat");
+filetype = 0;
+% dataFile{1} = fullfile(dataFilePath, "HipBursa.mat");
+% filetype = 0;
+
 [p,RFData] = initParams(dataFile,filetype);
-p.szAcq = int32(p.szRFframe+1);
 %% Process data
 pLarge = computeNewGrid(p,[1,p.szX],[1,300],p.szX*2,300*2);
 
@@ -37,8 +42,8 @@ M = 19;
 tic; images2 = bfmAndProcessFreq(pLarge,RFData,M); toc
 
 %% Plotting
-g0 = 0.5;
-figBio = plotBiologicalFig_manualPixels(pLarge, images1, images2, g0, 200);
+g0 = 0.35;
+figBio = plotBiologicalFig_manualPixels(pLarge, images1, images2, g0, 200, false);
 
 fig = figure('Position',[50 50 612 788]);
 plotGammaScaleImage(pLarge.xCoord*1e3,pLarge.zCoord*1e3,images1(1).data,g0)
@@ -46,7 +51,7 @@ axis image
 
 %% Helper Functions
 
-function [fig] = plotBiologicalFig_manualPixels(p, images1, images2, g0, input_img_width)
+function [fig] = plotBiologicalFig_manualPixels(p, images1, images2, g0, input_img_width, flag)
 
     p.dx = mean(diff(p.xCoord));
     p.dz = mean(diff(p.zCoord));
@@ -56,7 +61,11 @@ function [fig] = plotBiologicalFig_manualPixels(p, images1, images2, g0, input_i
     img_height   = input_img_width * aspect_ratio;
 
     % Grid definition
-    num_rows    = 4;
+    if flag
+        num_rows    = 4;
+    else
+        num_rows = 2;
+    end
     num_columns = 4;
 
     % Pixel gutters (set to 0 for fully flush)
@@ -86,8 +95,12 @@ function [fig] = plotBiologicalFig_manualPixels(p, images1, images2, g0, input_i
     n = 1;
     n = plotSubFigs_manualPixels(fig, tilePosPx, images1, p, n, g0, 30, xOffset); n = n + 1;
 
+    
     % Plot second set of images and label them
-    n = plotSubFigs_manualPixels(fig, tilePosPx, images2, p, n, g0, 0, xOffset); n = n + 1;
+    if flag
+        n = plotSubFigs_manualPixels(fig, tilePosPx, images2, p, n, g0, 0, xOffset); n = n + 1;
+    end
+
 
 end
 
@@ -96,7 +109,7 @@ function [n] = plotSubFigs_manualPixels(fig, tilePosPx, images, p, n, g0, yOffse
 
     for i = [1, 3:length(images)]
 
-        [~, g] = computeContrastMatch(images(1).data, images(i).data, g0);
+        [~, g] = computeContrastMatch(double(images(1).data), double(images(i).data), g0);
 
         tilePos = tilePosPx(n); tilePos(2) = tilePos(2) + yOffset;
         if (i >= length(images)-1)

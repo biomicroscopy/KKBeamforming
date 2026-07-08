@@ -26,16 +26,17 @@ function [Recon] = BfmDAS(RFData, p)
 % See also: initParamsLUTV2, DASLUT, BfmKKFreqSum
 
     % FFT along time dimension
-    RFData2 = single(reshape(RFData,[p.szAcq,p.na*p.nc]));
+    RFData2 = single(reshape(RFData(1:(p.szAcq*p.na),:),[p.szAcq,p.na*p.nc]));
     DataFFT = fft(RFData2,[],1);
-
-    % Apply Hilbert transform weights (one-sided spectrum)
+    
+    % Hilbert Xform
     DataFFT = DataFFT.*p.h;
-
-    % IFFT to obtain analytic signal
+    
+    % IFFT
     Data = ifft(DataFFT,[],1);
-    Data = reshape(Data,[p.szRF,p.nc]);
+    Data = reshape(Data,[p.szAcq*p.na,p.nc]);
+    p.szRF = int32(p.szAcq*p.na);
 
     % LUT-based DAS beamforming
-    Recon = DASLUT(p,Data,p.RXDelay,p.TXDelayX,p.TXDelayZ);
+    Recon = DASLUT(p,Data,p.RXDelayX,p.RXDelayZ,p.TXDelayX,p.TXDelayZ,p.RXApX,p.RXApZ);
 end

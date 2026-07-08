@@ -20,11 +20,11 @@ clearvars
 % Extract Current Path
 currentDir = matlab.desktop.editor.getActiveFilename;
 currentDir = regexp(currentDir, filesep, 'split');
-dataFilePath = fullfile(currentDir{1:find(contains(currentDir,"Ultrasound"),1)},"Datasets","KK Data","TallPhantom_2.3.26\");
+dataFilePath = fullfile(currentDir{1:find(contains(currentDir,"KKBeamforming"),1)},"Datasets");
 
 n = 1;
-dataFile{n} = dataFilePath + "ContrastTarget_15A24R.mat"; n = n+1;
-dataFile{n} = dataFilePath + "ContrastTarget_7A24R.mat"; n = n+1;
+dataFile{n} = fullfile(dataFilePath, "ContrastTarget_15A24R.mat"); n = n+1;
+dataFile{n} = fullfile(dataFilePath, "ContrastTarget_7A24R.mat"); n = n+1;
 filetype = 0;
 
 %% Process data

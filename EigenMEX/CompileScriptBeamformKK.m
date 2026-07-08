@@ -19,7 +19,7 @@ close all
 currentDir = matlab.desktop.editor.getActiveFilename;
 currentDir = regexp(currentDir, filesep, 'split');
 nL = length(currentDir);
-ipath = ['-I' fullfile(currentDir{1:nL-2},'Verasonics Integrated C Code','lib','eigen-3.4.0')]; % mfilename also includes the filename in the directory, so we need to remove that
+ipath = ['-I' fullfile(currentDir{1:nL-2},'inc','eigen-3.4.0')]; % mfilename also includes the filename in the directory, so we need to remove that
 %% Compile
 mingwFlags = {'CXXFLAGS="$CXXFLAGS -march=native -std=c++14 -fno-math-errno -ffast-math -fopenmp -DNDEBUG -w -Wno-error"',...
             'LDFLAGS="$LDFLAGS -fopenmp"','CXXOPTIMFLAGS="-O3"'};

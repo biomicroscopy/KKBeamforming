@@ -63,7 +63,7 @@ function [param,RFdata,varargout] = initParams(dataFile,filetype)
         TXangle = reshape([TX(:).Steer],2,[]);
         TXangle = TXangle(1,:);
         na = length(TXangle);
-        RFdata = RcvData{1}(:,:,8);
+        RFdata = RcvData{1}(:,:,1);
 
         VSonicsInit;
 
@@ -108,4 +108,6 @@ function [param,RFdata,varargout] = initParams(dataFile,filetype)
     param.L = param.ElemPos(end)-param.ElemPos(1); % total array aperture [m]
     param.tShift = 0.0;
     param.txPL = zeros(length(param.TXangle));
+    param.bpSampled = int32(0);
+    param.szAcq = int32(param.szRFframe+1);
 end

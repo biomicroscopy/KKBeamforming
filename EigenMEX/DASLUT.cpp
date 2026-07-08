@@ -60,7 +60,8 @@
 // Parameters Class Definition
 class Parameters {
 public:
-    int numEl, szRF, szAcq, szX, szZ, nPoints, na, nc;
+    int numEl, szRF, szAcq, szX, szZ, nPoints, na, nc, bpSampled;
+    float fsOverC;
     
     Eigen::VectorXi ConnMap;
 
@@ -91,13 +92,23 @@ public:
         
         // Assign LUTs
         auto RXptrX = getDataPtr<float>(inputs[2]);
-        Eigen::Map<const Eigen::MatrixXf> RXDelay(RXptrX, p.numEl+p.szX-1, p.szZ);
+        Eigen::Map<const Eigen::MatrixXf> RXDelayX(RXptrX, p.numEl, p.szX);
         
-        auto TXptrX = getDataPtr<float>(inputs[3]);
-        Eigen::Map<const Eigen::MatrixXf> TXDelayX(TXptrX, p.szX, p.na);
+        auto RXptrZ = getDataPtr<float>(inputs[3]);
+        Eigen::Map<const Eigen::VectorXf> RXDelayZ(RXptrZ, p.szZ);
         
-        auto TXptrZ = getDataPtr<float>(inputs[4]);
+        auto TXptrX = getDataPtr<float>(inputs[4]);
+        Eigen::Map<const Eigen::MatrixXf> TXDelayX(TXptrX, p.szX, p.na );
+        
+        auto TXptrZ = getDataPtr<float>(inputs[5]);
         Eigen::Map<const Eigen::MatrixXf> TXDelayZ(TXptrZ, p.szZ, p.na);
+
+        // Assign LUTs for Aperture checks
+        auto RXptrApX = getDataPtr<float>(inputs[6]);
+        Eigen::Map<const Eigen::MatrixXf> RXApX(RXptrApX, p.numEl, p.szX);
+        
+        auto RXptrApZ = getDataPtr<float>(inputs[7]);
+        Eigen::Map<const Eigen::VectorXf> RXApZ(RXptrApZ, p.szZ);
         
         // Initialize Output
         outputs[0] = factory.createArray<std::complex<float>>({static_cast<size_t>(p.szZ),static_cast<size_t>(p.szX)});
@@ -112,7 +123,7 @@ public:
 
 
         for(int i = 0; i < p.na; i++) {
-            bfmDASCMPLX(p, TXDelayX.col(i), TXDelayZ.col(i), RXDelay, Recon,
+            bfmDASCMPLX(p, TXDelayX.col(i), TXDelayZ.col(i), RXDelayX, RXDelayZ, RXApX, RXApZ, Recon,
                 RFData(Eigen::seq(i*p.szAcq,(i+1)*(p.szAcq)-1),p.ConnMap.array()-1));
         }
         
@@ -122,27 +133,31 @@ public:
     void bfmDASCMPLX(const Parameters& p,
             const Eigen::Ref<const Eigen::VectorXf> TXDelayX,
             const Eigen::Ref<const Eigen::VectorXf> TXDelayZ,
-            const Eigen::Ref<const Eigen::MatrixXf> RXDelay,
+            const Eigen::Ref<const Eigen::MatrixXf> RXDelayX,
+            const Eigen::Ref<const Eigen::VectorXf> RXDelayZ,
+            const Eigen::Ref<const Eigen::MatrixXf> RXApX,
+            const Eigen::Ref<const Eigen::VectorXf> RXApZ,
             Eigen::Ref<Eigen::MatrixXcf> Recon,
             const Eigen::Ref<const Eigen::MatrixXcf>& RFData) {
 
-        // Parallelize over lateral pixel positions
         #pragma omp parallel for
         for (int ix = 0; ix < p.szX; ix++) {
             for (int iz = 0; iz < p.szZ; iz++) {
-                // Combined TX delay for this pixel and angle
                 float tx = TXDelayX(ix) + TXDelayZ(iz);
 
-                // Map lateral pixel to reduced-redundancy RX delay index
                 int ixD = p.szX-ix;
                 for (int ie = 0; ie < p.numEl; ++ie) {
 
-                    const int iD = ie + ixD - 1;
+                    // const int iD = ie + ixD - 1;
+                    float s = -1.0f;
+                    if (RXApX(ie,ix) <= RXApZ(iz)) {
+                        s = std::sqrt(RXDelayX(ie,ix) + RXDelayZ(iz))*p.fsOverC + tx;
+                    }
 
-                    // Total round-trip delay in samples
-                    const float s = RXDelay(iD,iz) + tx;
 
-                    // Linear interpolation between adjacent samples
+                    // const float s = RXDelay(iD,iz) + tx;
+
+                    // base sample (0-based)
                     int base = static_cast<int>(s);
                     const float w = s - static_cast<float>(base);
 
@@ -150,8 +165,13 @@ public:
                     if (base >= 0 && (base + 1) < p.szAcq) {
                         const std::complex<float> v0 = RFData(base,     ie);
                         const std::complex<float> v1 = RFData(base + 1, ie);
+                        auto interp = (1.0f - w) * v0 + w * v1;
+                        if (p.bpSampled) {
+                            float phase = -6.2831853f * w;
+                            interp *= std::complex<float>(cosf(phase), sinf(phase));
+                        }
 
-                        Recon(iz,ix) += (1.0f - w) * v0 + w * v1;
+                        Recon(iz,ix) += interp;
                     }
                 }
             }
@@ -165,6 +185,8 @@ public:
         using namespace matlab::data;
         
         // Load and initialize parameters
+        TypedArray<float> tempf = obj[0]["fsOverC"];
+        p.fsOverC = std::move(tempf[0]);
 
         TypedArray<int> tempI0 = obj[0]["numEl"];
         TypedArray<int> tempI1 = obj[0]["szRF"];
@@ -173,6 +195,7 @@ public:
         TypedArray<int> tempI4 = obj[0]["szZ"];
         TypedArray<int> tempI5 = obj[0]["na"];
         TypedArray<int> tempI6 = obj[0]["nc"];
+        TypedArray<int> tempI7 = obj[0]["bpSampled"];
 
         p.numEl = std::move(tempI0[0]);
         p.szRF = std::move(tempI1[0]);
@@ -181,6 +204,7 @@ public:
         p.szZ = std::move(tempI4[0]);
         p.na = std::move(tempI5[0]);
         p.nc = std::move(tempI6[0]);
+        p.bpSampled = std::move(tempI7[0]);
         
         matlab::data::TypedArray<int> temp = obj[0]["ConnMap"];
         p.ConnMap = Eigen::Map<Eigen::VectorXi>(temp.release().get(), p.numEl);

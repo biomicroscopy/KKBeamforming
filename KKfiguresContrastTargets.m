@@ -11,7 +11,7 @@
 %
 % Required functions: initParams, bfmAndProcessFreq, computeNewGrid,
 %   computeContrastMatch, RegionSelector, plotGammaScaleImage
-%
+%dataFile{1} = fullfile(dataFilePath, "ContrastTargets_24.mat");
 % Outputs: Figure with tiled DAS/KK comparison images and GCNR metrics
 
 %% Initialize file location
@@ -20,12 +20,12 @@ clearvars
 % Extract Current Path
 currentDir = matlab.desktop.editor.getActiveFilename;
 currentDir = regexp(currentDir, filesep, 'split');
-dataFilePath = fullfile(currentDir{1:find(contains(currentDir,"Ultrasound"),1)},"Datasets\");
+dataFilePath = fullfile(currentDir{1:find(contains(currentDir,"KKBeamforming"),1)},"Datasets");
 
-dataFile{1} = dataFilePath + "KK Data\TallPhantom_1.9.26\ContrastTargets_24.mat";
+dataFile{1} = fullfile(dataFilePath, "ContrastTargets_24.mat");
 filetype = 0;
 [p,RFData] = initParams(dataFile,filetype);
-p.szAcq = int32(p.szRFframe+1);
+
 %% Process data
 pLarge = computeNewGrid(p,[76,140],[71,135],65*4,65*4);
 

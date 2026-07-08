@@ -40,57 +40,67 @@ function [pO] = initKKFreqDomain(p)
     pO = p;
     pO.nRX = int32(p.nRX);
 
-    % Precompute shift factor parameters
-    s = double(2*p.pitch*p.fs/p.c);    % normalized element spacing in samples
-    tSize = double(p.szAcq);            % FFT length
-    xSize = double(p.numEl);             % number of elements
-    RXangle = double(p.RXangle(:)).';    % [1 x nRX]
+    % precompute
 
-    % Frequency bin indices (centered, then ifftshifted for FFT ordering)
+    s = double(2*p.pitch*p.fs/p.c);
+    tSize = double(p.szAcq);
+    xSize = double(p.numEl);
+    RXangle = double(p.RXangle(:)).';
+
+    
     k = ifftshift((-floor(tSize/2):ceil(tSize/2)-1).');
-    k = permute(k(:),[3,2,1]);          % [1 x 1 x szAcq] for broadcasting
-
-    % Per-element phase slopes for each RX angle
+    k = permute(k(:),[3,2,1]);
+    
     slopes = s*sin(RXangle)/2;
     nShifts = abs(slopes).*abs((1:xSize).' - xSize.^((1-sign(slopes))/2));
-
-    % One-sided Hilbert spectral weighting vector
+    
     h = zeros(p.szAcq,1);
     if p.szAcq > 0 && 2*fix(p.szAcq/2) == p.szAcq
-        % even length
+        % even and nonempty
         h([1 p.szAcq/2+1]) = 1;
         h(2:p.szAcq/2) = 2;
         pO.midpt = p.szAcq/2+1;
     elseif p.szAcq>0
-        % odd length
+        % odd and nonempty
         h(1) = 1;
         h(2:(p.szAcq+1)/2) = 2;
         pO.midpt = (p.szAcq+1)/2;
     end
 
-    % Build shift factors: phase ramp * Hilbert weight
-    % Result: [numEl x nRX x szAcq], then reshaped to [(numEl*nRX) x szAcq]
-    shiftFac = exp(-1i*2*pi*k.*nShifts/tSize).*permute(h,[3,2,1]);
-    shiftFac = single(shiftFac);
-    pO.shiftFac = reshape(shiftFac,[p.numEl*p.nRX,p.szAcq]);
+    
+    % Exponential
+    shiftFac = exp(-1i*2*pi*k.*nShifts/tSize).*permute(h,[3,2,1]); 
+    shiftFac = single(shiftFac); 
+    pO.shiftFac = reshape(shiftFac,[p.numEl*p.nRX,p.szAcq]); % [numEl*nRX, szAcq]
+%     pO.nShifts = nShifts;
 
-    % Enforce types for MEX compatibility
+    % Further checks
     pO = convertParamsToInteger(pO);
+    
     pO = convertParamsToSingle(pO);
 
-    x = single(pO.xCoord(:));          % [szX x 1]
-    z = single(pO.zCoord(:));          % [szZ x 1]
+    % Flatten pixel grid in MATLAB's column-major order:
+    % pix = iz + (ix-1)*szZ  (1-based in MATLAB)
+    % We'll keep it as an Npoints-by-1 list to match Eigen column-major mapping.
+    x = single(pO.xCoord(:));          % [szX,1]
+    z = single(pO.zCoord(:));          % [szZ,1]
+    
 
-    % Common scale factor: convert meters to samples
+    % Convert common scale: fs/c
     fsOverC = single(pO.fs / pO.c);
 
-    % --- TX plane-wave delay LUT (separable X and Z components) ---
-    theta = single(pO.TXangle(:)).';    % [1 x na]
+    % --- TX plane-wave delay LUT in samples: [szX or szZ x na] ---
+    % Plane wave propagation delay: (x*sin(theta) + z*cos(theta)) / c
+    % Convert to samples: fs/c * (...)
+    theta = single(pO.TXangle(:)).';    % [1,na]
     pO.TXDelayX = (((sign(theta)*p.L/2 + x).*sin(theta))*fsOverC);
     pO.TXDelayZ = (z.*cos(theta)*fsOverC + p.t0*p.fs);
-
-    % --- RX plane-wave delay LUT (separable X and Z components) ---
-    thetaR = single(pO.RXangle(:)).';   % [1 x nRX]
+    
+    
+    % --- RX plane-wave delay LUT in samples: [szX or szZ x nRX] ---
+    % Plane wave propagation delay: (x*sin(theta) + z*cos(theta)) / c
+    % Convert to samples: fs/c * (...)
+    thetaR = single(pO.RXangle(:)).';    % [1,na]
     pO.RXDelayX = (((sign(thetaR)*p.L/2 + x).*sin(thetaR))*fsOverC);
     pO.RXDelayZ = (z.*cos(thetaR)*fsOverC);
 
